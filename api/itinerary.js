@@ -1,5 +1,7 @@
 const { neon } = require('@neondatabase/serverless');
 
+const ITINERARY_KEY = 'main';
+
 module.exports = async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -11,10 +13,16 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+    // Try all possible Neon environment variable names
+    const databaseUrl = process.env.POSTGRES_URL_NON_POOLING
+      || process.env.POSTGRES_URL
+      || process.env.DATABASE_URL;
 
     if (!databaseUrl) {
-      return res.status(500).json({ error: 'Database not configured' });
+      return res.status(500).json({
+        error: 'Database not configured',
+        availableEnvVars: Object.keys(process.env).filter(k => k.includes('POSTGRES') || k.includes('DATABASE'))
+      });
     }
 
     const sql = neon(databaseUrl);
@@ -22,14 +30,14 @@ module.exports = async function handler(req, res) {
     // Create table if not exists
     await sql`
       CREATE TABLE IF NOT EXISTS itinerary (
-        id TEXT PRIMARY KEY DEFAULT 'main',
+        id TEXT PRIMARY KEY,
         data JSONB NOT NULL,
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `;
 
     if (req.method === 'GET') {
-      const result = await sql`SELECT data FROM itinerary WHERE id = 'main'`;
+      const result = await sql`SELECT data FROM itinerary WHERE id = ${ITINERARY_KEY}`;
       const data = result[0]?.data || { items: [], tripInfo: { title: '', dates: '' }, rawContent: '' };
       return res.status(200).json(data);
     }
@@ -40,9 +48,9 @@ module.exports = async function handler(req, res) {
 
       await sql`
         INSERT INTO itinerary (id, data, updated_at)
-        VALUES ('main', ${JSON.stringify(data)}, NOW())
+        VALUES (${ITINERARY_KEY}, ${JSON.stringify(data)}::jsonb, NOW())
         ON CONFLICT (id)
-        DO UPDATE SET data = ${JSON.stringify(data)}, updated_at = NOW()
+        DO UPDATE SET data = ${JSON.stringify(data)}::jsonb, updated_at = NOW()
       `;
 
       return res.status(200).json({ success: true });
