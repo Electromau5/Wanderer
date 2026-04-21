@@ -1,6 +1,4 @@
-const { Redis } = require('@upstash/redis');
-
-const ITINERARY_KEY = 'wanderer:itinerary';
+const { neon } = require('@neondatabase/serverless');
 
 module.exports = async function handler(req, res) {
   // Enable CORS
@@ -13,27 +11,40 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const url = process.env.KV_REST_API_URL;
-    const token = process.env.KV_REST_API_TOKEN;
+    const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 
-    if (!url || !token) {
-      return res.status(500).json({
-        error: 'Database not configured',
-        hasUrl: !!url,
-        hasToken: !!token
-      });
+    if (!databaseUrl) {
+      return res.status(500).json({ error: 'Database not configured' });
     }
 
-    const redis = new Redis({ url, token });
+    const sql = neon(databaseUrl);
+
+    // Create table if not exists
+    await sql`
+      CREATE TABLE IF NOT EXISTS itinerary (
+        id TEXT PRIMARY KEY DEFAULT 'main',
+        data JSONB NOT NULL,
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `;
 
     if (req.method === 'GET') {
-      const data = await redis.get(ITINERARY_KEY);
-      return res.status(200).json(data || { items: [], tripInfo: { title: '', dates: '' }, rawContent: '' });
+      const result = await sql`SELECT data FROM itinerary WHERE id = 'main'`;
+      const data = result[0]?.data || { items: [], tripInfo: { title: '', dates: '' }, rawContent: '' };
+      return res.status(200).json(data);
     }
 
     if (req.method === 'POST') {
       const { items, tripInfo, rawContent } = req.body;
-      await redis.set(ITINERARY_KEY, { items, tripInfo, rawContent });
+      const data = { items, tripInfo, rawContent };
+
+      await sql`
+        INSERT INTO itinerary (id, data, updated_at)
+        VALUES ('main', ${JSON.stringify(data)}, NOW())
+        ON CONFLICT (id)
+        DO UPDATE SET data = ${JSON.stringify(data)}, updated_at = NOW()
+      `;
+
       return res.status(200).json({ success: true });
     }
 
