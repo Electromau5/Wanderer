@@ -106,16 +106,25 @@ const Wanderer = () => {
   };
 
   const handleFileUpload = (event) => {
+    console.log('File upload triggered');
     const file = event.target.files[0];
-    if (!file) return;
+    if (!file) {
+      console.log('No file selected');
+      return;
+    }
 
+    console.log('File selected:', file.name);
     setUploadedFile(file);
 
     const reader = new FileReader();
     reader.onload = (e) => {
       const content = e.target.result;
+      console.log('File content loaded, length:', content.length);
       setRawContent(content);
       parseDocument(content);
+    };
+    reader.onerror = (e) => {
+      console.error('File read error:', e);
     };
     reader.readAsText(file);
   };
@@ -203,6 +212,9 @@ const Wanderer = () => {
 
     // Save last item
     saveCurrentItem();
+
+    console.log('Parsed items:', parsedItems.length);
+    console.log('Trip info:', tripTitle, tripDates);
 
     setTripInfo({ title: tripTitle, dates: tripDates });
     setItems(parsedItems);
