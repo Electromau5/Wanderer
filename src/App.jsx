@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Calendar, MapPin, Clock, Navigation, Check, X, ChevronDown, ChevronUp, FileText } from 'lucide-react';
+import { Upload, Calendar, Clock, Check, X, ChevronDown, ChevronUp, FileText } from 'lucide-react';
 
 const Wanderer = () => {
   const [uploadedFile, setUploadedFile] = useState(null);
@@ -7,7 +7,7 @@ const Wanderer = () => {
   const [items, setItems] = useState([]);
   const [tripInfo, setTripInfo] = useState({ title: '', dates: '' });
   const [showRawContent, setShowRawContent] = useState(false);
-  const [filter, setFilter] = useState('all'); // 'all', 'pending', 'approved', 'rejected'
+  const [filter, setFilter] = useState('all');
 
   // Category configuration
   const categories = {
@@ -54,67 +54,78 @@ const Wanderer = () => {
     reader.readAsText(file);
   };
 
-  const detectCategory = (text) => {
-    const lowerText = text.toLowerCase();
-    if (lowerText.match(/museum|temple|church|gallery|historic|monument|palace|fort|ruins|art/)) return 'culture';
-    if (lowerText.match(/restaurant|cafe|coffee|breakfast|lunch|dinner|food|eat|bistro|bar\s/)) return 'dining';
-    if (lowerText.match(/hike|trek|beach|surf|dive|climb|adventure|outdoor|nature|park|garden/)) return 'adventure';
-    if (lowerText.match(/shop|market|mall|store|boutique|bazaar/)) return 'shopping';
-    if (lowerText.match(/club|nightlife|pub|lounge|disco|party/)) return 'nightlife';
-    if (lowerText.match(/hotel|hostel|airbnb|stay|accommodation|resort|lodge/)) return 'accommodation';
-    if (lowerText.match(/flight|train|bus|taxi|uber|airport|station|transport|car\s*rental/)) return 'transportation';
-    return 'other';
-  };
-
   const parseDocument = (content) => {
     const lines = content.split('\n').map(l => l.trim()).filter(l => l);
     const parsedItems = [];
-    let title = '';
-    let dates = '';
+    let tripTitle = '';
+    let tripDates = '';
+
+    // Current item being parsed
+    let currentItem = null;
+
+    const saveCurrentItem = () => {
+      if (currentItem && currentItem.title) {
+        parsedItems.push({
+          ...currentItem,
+          id: `item-${Date.now()}-${parsedItems.length}`,
+          status: 'pending'
+        });
+      }
+      currentItem = null;
+    };
+
+    const normalizeCategory = (cat) => {
+      const lower = cat.toLowerCase().trim();
+      if (lower.includes('cultur')) return 'culture';
+      if (lower.includes('dining') || lower.includes('food') || lower.includes('restaurant')) return 'dining';
+      if (lower.includes('adventure') || lower.includes('outdoor')) return 'adventure';
+      if (lower.includes('shop')) return 'shopping';
+      if (lower.includes('night') || lower.includes('bar') || lower.includes('club')) return 'nightlife';
+      if (lower.includes('hotel') || lower.includes('accommodation') || lower.includes('stay')) return 'accommodation';
+      if (lower.includes('transport') || lower.includes('flight') || lower.includes('travel')) return 'transportation';
+      return 'other';
+    };
 
     lines.forEach((line, index) => {
-      // Try to detect title from first few lines
-      if (index < 3 && !title && line.length > 3 && line.length < 100) {
-        if (!line.includes(':') || line.toLowerCase().includes('trip') || line.toLowerCase().includes('itinerary')) {
-          title = line;
-          return;
+      // Check for labeled fields (case insensitive)
+      const titleMatch = line.match(/^(?:•\s*)?Title\s*:\s*(.+)/i);
+      const categoryMatch = line.match(/^(?:•\s*)?Category\s*:\s*(.+)/i);
+      const arrivalTimeMatch = line.match(/^(?:•\s*)?Arrival\s*Time\s*:\s*(.+)/i);
+      const descriptionMatch = line.match(/^(?:•\s*)?Description\s*:\s*(.+)/i);
+
+      if (titleMatch) {
+        // Save previous item if exists
+        saveCurrentItem();
+        // Start new item
+        currentItem = {
+          title: titleMatch[1].trim(),
+          category: 'other',
+          arrivalTime: '',
+          description: ''
+        };
+      } else if (categoryMatch && currentItem) {
+        currentItem.category = normalizeCategory(categoryMatch[1]);
+      } else if (arrivalTimeMatch && currentItem) {
+        currentItem.arrivalTime = arrivalTimeMatch[1].trim();
+      } else if (descriptionMatch && currentItem) {
+        currentItem.description = descriptionMatch[1].trim();
+      } else if (!currentItem) {
+        // Try to detect trip title/dates from non-labeled lines at the start
+        if (index < 5 && !tripTitle && line.length > 3 && line.length < 100) {
+          const datePattern = /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})|(\w+\s+\d{1,2},?\s+\d{4})|(\d{4}-\d{2}-\d{2})/gi;
+          if (datePattern.test(line)) {
+            tripDates = line;
+          } else if (!line.includes(':')) {
+            tripTitle = line;
+          }
         }
-      }
-
-      // Detect dates
-      const datePattern = /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})|(\w+\s+\d{1,2},?\s+\d{4})|(\d{4}-\d{2}-\d{2})/gi;
-      const dateMatch = line.match(datePattern);
-      if (dateMatch && !dates) {
-        dates = line;
-        return;
-      }
-
-      // Skip section headers
-      if (line.endsWith(':') && line.length < 30) return;
-
-      // Parse as an item if it's substantial
-      if (line.length > 5) {
-        const category = detectCategory(line);
-
-        // Try to extract time if present
-        const timeMatch = line.match(/(\d{1,2}:\d{2}\s*(AM|PM|am|pm)?)|(\d{1,2}\s*(AM|PM|am|pm))/);
-        const time = timeMatch ? timeMatch[0] : '';
-
-        parsedItems.push({
-          id: `item-${Date.now()}-${index}`,
-          name: line.replace(timeMatch?.[0] || '', '').trim(),
-          category,
-          time: time || 'TBD',
-          duration: '2 hours',
-          distance: '1 km from accommodation',
-          travelTime: '15 mins walk',
-          description: '',
-          status: 'pending' // 'pending', 'approved', 'rejected'
-        });
       }
     });
 
-    setTripInfo({ title, dates });
+    // Save last item
+    saveCurrentItem();
+
+    setTripInfo({ title: tripTitle, dates: tripDates });
     setItems(parsedItems);
   };
 
@@ -157,7 +168,7 @@ const Wanderer = () => {
       <div className={`rounded-xl border-2 p-5 transition-all ${statusStyles[item.status]}`}>
         {/* Header: Title + Buttons */}
         <div className="flex items-start justify-between gap-4 mb-3">
-          <h3 className="text-lg font-bold text-gray-900 flex-1">{item.name}</h3>
+          <h3 className="text-xl font-bold text-gray-900 flex-1">{item.title}</h3>
           {item.status === 'pending' && (
             <div className="flex gap-2 flex-shrink-0">
               <button
@@ -198,32 +209,20 @@ const Wanderer = () => {
           </span>
         </div>
 
-        {/* Metadata Grid */}
-        <div className="grid grid-cols-2 gap-x-8 gap-y-2 mb-4 text-gray-600">
-          <div className="flex items-center gap-2">
+        {/* Arrival Time */}
+        {item.arrivalTime && (
+          <div className="flex items-center gap-2 mb-4 text-gray-600">
             <Clock className="w-4 h-4" />
-            <span>{item.time}</span>
+            <span>{item.arrivalTime}</span>
           </div>
-          <div className="flex items-center gap-2">
-            <MapPin className="w-4 h-4" />
-            <span>{item.duration}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Navigation className="w-4 h-4" />
-            <span>{item.distance}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4" />
-            <span>{item.travelTime}</span>
-          </div>
-        </div>
+        )}
 
         {/* Description */}
         {item.description && (
-          <p className="text-gray-700">{item.description}</p>
+          <p className="text-gray-700 leading-relaxed">{item.description}</p>
         )}
 
-        {/* Undo buttons for approved/rejected */}
+        {/* Undo button for approved/rejected */}
         {item.status !== 'pending' && (
           <button
             onClick={() => updateItemStatus(item.id, 'pending')}
@@ -270,12 +269,18 @@ const Wanderer = () => {
             </div>
 
             <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-              <p className="text-sm font-medium text-gray-700 mb-2">Tips for best results:</p>
-              <ul className="text-xs text-gray-600 space-y-1">
-                <li>Include dates, places, restaurants, and activities</li>
-                <li>List items on separate lines</li>
-                <li>Add times like "9:00 AM" for better organization</li>
-              </ul>
+              <p className="text-sm font-medium text-gray-700 mb-2">Document format:</p>
+              <pre className="text-xs text-gray-600 font-mono bg-white p-3 rounded border">
+{`Title: Activity Name
+• Category: Dining
+• Arrival Time: 8:30 PM
+• Description: Your description here
+
+Title: Next Activity
+• Category: Culture
+• Arrival Time: 10:00 AM
+• Description: Another description`}
+              </pre>
             </div>
           </div>
         </div>
