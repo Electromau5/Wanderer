@@ -1,28 +1,43 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Calendar, MapPin, Clock, Utensils, Bed, FileText, Plus, X, GripVertical, ChevronDown, ChevronUp } from 'lucide-react';
+import { Upload, Calendar, MapPin, Clock, Navigation, Check, X, ChevronDown, ChevronUp, FileText } from 'lucide-react';
 
 const Wanderer = () => {
   const [uploadedFile, setUploadedFile] = useState(null);
   const [rawContent, setRawContent] = useState('');
-  const [parsedData, setParsedData] = useState(null);
-  const [expandedSections, setExpandedSections] = useState({});
+  const [items, setItems] = useState([]);
+  const [tripInfo, setTripInfo] = useState({ title: '', dates: '' });
+  const [showRawContent, setShowRawContent] = useState(false);
+  const [filter, setFilter] = useState('all'); // 'all', 'pending', 'approved', 'rejected'
+
+  // Category configuration
+  const categories = {
+    culture: { label: 'Culture', icon: '🏛️', color: 'bg-purple-100 text-purple-700' },
+    dining: { label: 'Dining', icon: '🍴', color: 'bg-orange-100 text-orange-700' },
+    adventure: { label: 'Adventure', icon: '🏔️', color: 'bg-green-100 text-green-700' },
+    shopping: { label: 'Shopping', icon: '🛍️', color: 'bg-pink-100 text-pink-700' },
+    nightlife: { label: 'Nightlife', icon: '🍸', color: 'bg-indigo-100 text-indigo-700' },
+    accommodation: { label: 'Accommodation', icon: '🏨', color: 'bg-blue-100 text-blue-700' },
+    transportation: { label: 'Transportation', icon: '🚗', color: 'bg-teal-100 text-teal-700' },
+    other: { label: 'Other', icon: '📍', color: 'bg-gray-100 text-gray-700' }
+  };
 
   // Load saved data on mount
   useEffect(() => {
     const saved = localStorage.getItem('wanderer-data');
     if (saved) {
       const data = JSON.parse(saved);
-      setParsedData(data.parsedData);
+      setItems(data.items || []);
+      setTripInfo(data.tripInfo || { title: '', dates: '' });
       setRawContent(data.rawContent || '');
     }
   }, []);
 
   // Save data when it changes
   useEffect(() => {
-    if (parsedData) {
-      localStorage.setItem('wanderer-data', JSON.stringify({ parsedData, rawContent }));
+    if (items.length > 0 || tripInfo.title) {
+      localStorage.setItem('wanderer-data', JSON.stringify({ items, tripInfo, rawContent }));
     }
-  }, [parsedData, rawContent]);
+  }, [items, tripInfo, rawContent]);
 
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
@@ -39,31 +54,29 @@ const Wanderer = () => {
     reader.readAsText(file);
   };
 
+  const detectCategory = (text) => {
+    const lowerText = text.toLowerCase();
+    if (lowerText.match(/museum|temple|church|gallery|historic|monument|palace|fort|ruins|art/)) return 'culture';
+    if (lowerText.match(/restaurant|cafe|coffee|breakfast|lunch|dinner|food|eat|bistro|bar\s/)) return 'dining';
+    if (lowerText.match(/hike|trek|beach|surf|dive|climb|adventure|outdoor|nature|park|garden/)) return 'adventure';
+    if (lowerText.match(/shop|market|mall|store|boutique|bazaar/)) return 'shopping';
+    if (lowerText.match(/club|nightlife|pub|lounge|disco|party/)) return 'nightlife';
+    if (lowerText.match(/hotel|hostel|airbnb|stay|accommodation|resort|lodge/)) return 'accommodation';
+    if (lowerText.match(/flight|train|bus|taxi|uber|airport|station|transport|car\s*rental/)) return 'transportation';
+    return 'other';
+  };
+
   const parseDocument = (content) => {
     const lines = content.split('\n').map(l => l.trim()).filter(l => l);
-
-    // Initialize parsed structure
-    const data = {
-      title: '',
-      dates: '',
-      destination: '',
-      accommodation: [],
-      activities: [],
-      dining: [],
-      transportation: [],
-      notes: []
-    };
-
-    // Simple parsing logic - looks for common patterns
-    let currentSection = 'notes';
+    const parsedItems = [];
+    let title = '';
+    let dates = '';
 
     lines.forEach((line, index) => {
-      const lowerLine = line.toLowerCase();
-
-      // Try to detect destination/title from first few lines
-      if (index < 3 && !data.title && line.length > 3 && line.length < 100) {
-        if (!line.includes(':') || lowerLine.includes('trip') || lowerLine.includes('itinerary')) {
-          data.title = line;
+      // Try to detect title from first few lines
+      if (index < 3 && !title && line.length > 3 && line.length < 100) {
+        if (!line.includes(':') || line.toLowerCase().includes('trip') || line.toLowerCase().includes('itinerary')) {
+          title = line;
           return;
         }
       }
@@ -71,219 +84,160 @@ const Wanderer = () => {
       // Detect dates
       const datePattern = /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})|(\w+\s+\d{1,2},?\s+\d{4})|(\d{4}-\d{2}-\d{2})/gi;
       const dateMatch = line.match(datePattern);
-      if (dateMatch && !data.dates) {
-        data.dates = line;
+      if (dateMatch && !dates) {
+        dates = line;
         return;
       }
 
-      // Detect section headers
-      if (lowerLine.includes('hotel') || lowerLine.includes('stay') || lowerLine.includes('accommodation') || lowerLine.includes('airbnb') || lowerLine.includes('hostel')) {
-        currentSection = 'accommodation';
-        if (line.includes(':')) {
-          const value = line.split(':').slice(1).join(':').trim();
-          if (value) data.accommodation.push({ text: value, type: 'accommodation' });
-        }
-        return;
-      }
+      // Skip section headers
+      if (line.endsWith(':') && line.length < 30) return;
 
-      if (lowerLine.includes('restaurant') || lowerLine.includes('food') || lowerLine.includes('eat') || lowerLine.includes('dining') || lowerLine.includes('breakfast') || lowerLine.includes('lunch') || lowerLine.includes('dinner') || lowerLine.includes('cafe') || lowerLine.includes('coffee')) {
-        currentSection = 'dining';
-        if (line.includes(':')) {
-          const value = line.split(':').slice(1).join(':').trim();
-          if (value) data.dining.push({ text: value, type: 'dining' });
-        } else if (!lowerLine.endsWith(':')) {
-          data.dining.push({ text: line, type: 'dining' });
-        }
-        return;
-      }
+      // Parse as an item if it's substantial
+      if (line.length > 5) {
+        const category = detectCategory(line);
 
-      if (lowerLine.includes('flight') || lowerLine.includes('train') || lowerLine.includes('bus') || lowerLine.includes('transport') || lowerLine.includes('taxi') || lowerLine.includes('uber') || lowerLine.includes('car rental')) {
-        currentSection = 'transportation';
-        data.transportation.push({ text: line, type: 'transport' });
-        return;
-      }
+        // Try to extract time if present
+        const timeMatch = line.match(/(\d{1,2}:\d{2}\s*(AM|PM|am|pm)?)|(\d{1,2}\s*(AM|PM|am|pm))/);
+        const time = timeMatch ? timeMatch[0] : '';
 
-      if (lowerLine.includes('visit') || lowerLine.includes('see') || lowerLine.includes('activity') || lowerLine.includes('activities') || lowerLine.includes('museum') || lowerLine.includes('park') || lowerLine.includes('beach') || lowerLine.includes('tour') || lowerLine.includes('explore')) {
-        currentSection = 'activities';
-        if (!lowerLine.endsWith(':')) {
-          data.activities.push({ text: line, type: 'activity' });
-        }
-        return;
-      }
-
-      // Detect day markers
-      if (lowerLine.match(/^day\s*\d+/i) || lowerLine.match(/^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i)) {
-        data.activities.push({ text: line, type: 'day-marker' });
-        currentSection = 'activities';
-        return;
-      }
-
-      // Add to current section
-      if (line.length > 2) {
-        switch (currentSection) {
-          case 'accommodation':
-            data.accommodation.push({ text: line, type: 'accommodation' });
-            break;
-          case 'dining':
-            data.dining.push({ text: line, type: 'dining' });
-            break;
-          case 'transportation':
-            data.transportation.push({ text: line, type: 'transport' });
-            break;
-          case 'activities':
-            data.activities.push({ text: line, type: 'activity' });
-            break;
-          default:
-            data.notes.push({ text: line, type: 'note' });
-        }
+        parsedItems.push({
+          id: `item-${Date.now()}-${index}`,
+          name: line.replace(timeMatch?.[0] || '', '').trim(),
+          category,
+          time: time || 'TBD',
+          duration: '2 hours',
+          distance: '1 km from accommodation',
+          travelTime: '15 mins walk',
+          description: '',
+          status: 'pending' // 'pending', 'approved', 'rejected'
+        });
       }
     });
 
-    // Extract destination from title if not found
-    if (!data.destination && data.title) {
-      data.destination = data.title;
-    }
-
-    setParsedData(data);
-    setExpandedSections({
-      activities: true,
-      dining: true,
-      accommodation: true,
-      transportation: true,
-      notes: true
-    });
+    setTripInfo({ title, dates });
+    setItems(parsedItems);
   };
 
-  const toggleSection = (section) => {
-    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
-  };
-
-  const removeItem = (section, index) => {
-    setParsedData(prev => ({
-      ...prev,
-      [section]: prev[section].filter((_, i) => i !== index)
-    }));
-  };
-
-  const addItem = (section) => {
-    const newItem = { text: '', type: section === 'dining' ? 'dining' : section === 'accommodation' ? 'accommodation' : section === 'transportation' ? 'transport' : section === 'activities' ? 'activity' : 'note', isEditing: true };
-    setParsedData(prev => ({
-      ...prev,
-      [section]: [...prev[section], newItem]
-    }));
-  };
-
-  const updateItem = (section, index, newText) => {
-    setParsedData(prev => ({
-      ...prev,
-      [section]: prev[section].map((item, i) =>
-        i === index ? { ...item, text: newText, isEditing: false } : item
-      )
-    }));
-  };
-
-  const startEditing = (section, index) => {
-    setParsedData(prev => ({
-      ...prev,
-      [section]: prev[section].map((item, i) =>
-        i === index ? { ...item, isEditing: true } : item
-      )
-    }));
+  const updateItemStatus = (itemId, status) => {
+    setItems(prev => prev.map(item =>
+      item.id === itemId ? { ...item, status } : item
+    ));
   };
 
   const clearAll = () => {
     setUploadedFile(null);
     setRawContent('');
-    setParsedData(null);
+    setItems([]);
+    setTripInfo({ title: '', dates: '' });
     localStorage.removeItem('wanderer-data');
   };
 
-  const SectionCard = ({ title, icon: Icon, items, section, color }) => {
-    const isExpanded = expandedSections[section];
-    const colorClasses = {
-      blue: 'bg-blue-50 border-blue-200 text-blue-700',
-      orange: 'bg-orange-50 border-orange-200 text-orange-700',
-      purple: 'bg-purple-50 border-purple-200 text-purple-700',
-      green: 'bg-green-50 border-green-200 text-green-700',
-      gray: 'bg-gray-50 border-gray-200 text-gray-700'
-    };
-    const headerColors = {
-      blue: 'bg-blue-600',
-      orange: 'bg-orange-600',
-      purple: 'bg-purple-600',
-      green: 'bg-green-600',
-      gray: 'bg-gray-600'
+  const filteredItems = items.filter(item => {
+    if (filter === 'all') return true;
+    return item.status === filter;
+  });
+
+  const statusCounts = {
+    all: items.length,
+    pending: items.filter(i => i.status === 'pending').length,
+    approved: items.filter(i => i.status === 'approved').length,
+    rejected: items.filter(i => i.status === 'rejected').length
+  };
+
+  // Item Card Component
+  const ItemCard = ({ item }) => {
+    const category = categories[item.category] || categories.other;
+    const statusStyles = {
+      pending: 'bg-slate-50 border-slate-200',
+      approved: 'bg-green-50 border-green-200',
+      rejected: 'bg-red-50 border-red-200 opacity-60'
     };
 
     return (
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <button
-          onClick={() => toggleSection(section)}
-          className={`w-full px-5 py-4 flex items-center justify-between ${headerColors[color]} text-white`}
-        >
-          <div className="flex items-center gap-3">
-            <Icon className="w-5 h-5" />
-            <span className="font-semibold">{title}</span>
-            <span className="bg-white/20 px-2 py-0.5 rounded-full text-sm">{items.length}</span>
-          </div>
-          {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-        </button>
+      <div className={`rounded-xl border-2 p-5 transition-all ${statusStyles[item.status]}`}>
+        {/* Header: Title + Buttons */}
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <h3 className="text-lg font-bold text-gray-900 flex-1">{item.name}</h3>
+          {item.status === 'pending' && (
+            <div className="flex gap-2 flex-shrink-0">
+              <button
+                onClick={() => updateItemStatus(item.id, 'approved')}
+                className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
+              >
+                <Check className="w-4 h-4" />
+                Approve
+              </button>
+              <button
+                onClick={() => updateItemStatus(item.id, 'rejected')}
+                className="flex items-center gap-1.5 px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors"
+              >
+                <X className="w-4 h-4" />
+                Reject
+              </button>
+            </div>
+          )}
+          {item.status === 'approved' && (
+            <span className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium">
+              <Check className="w-4 h-4" />
+              Approved
+            </span>
+          )}
+          {item.status === 'rejected' && (
+            <span className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white rounded-lg text-sm font-medium">
+              <X className="w-4 h-4" />
+              Rejected
+            </span>
+          )}
+        </div>
 
-        {isExpanded && (
-          <div className="p-4">
-            {items.length === 0 ? (
-              <p className="text-gray-400 text-sm italic">No items yet</p>
-            ) : (
-              <ul className="space-y-2">
-                {items.map((item, index) => (
-                  <li key={index} className={`flex items-start gap-2 p-3 rounded-lg border ${colorClasses[color]}`}>
-                    <GripVertical className="w-4 h-4 mt-0.5 opacity-40 cursor-grab" />
-                    {item.isEditing ? (
-                      <input
-                        type="text"
-                        defaultValue={item.text}
-                        autoFocus
-                        onBlur={(e) => updateItem(section, index, e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            updateItem(section, index, e.target.value);
-                          }
-                        }}
-                        className="flex-1 bg-white px-2 py-1 rounded border border-gray-300 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    ) : (
-                      <span
-                        className="flex-1 text-sm cursor-pointer"
-                        onClick={() => startEditing(section, index)}
-                      >
-                        {item.text || <span className="italic text-gray-400">Click to edit</span>}
-                      </span>
-                    )}
-                    <button
-                      onClick={() => removeItem(section, index)}
-                      className="text-red-400 hover:text-red-600 transition-colors"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <button
-              onClick={() => addItem(section)}
-              className="mt-3 flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Add item
-            </button>
+        {/* Category Badge */}
+        <div className="mb-4">
+          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium ${category.color}`}>
+            <span>{category.icon}</span>
+            {category.label}
+          </span>
+        </div>
+
+        {/* Metadata Grid */}
+        <div className="grid grid-cols-2 gap-x-8 gap-y-2 mb-4 text-gray-600">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4" />
+            <span>{item.time}</span>
           </div>
+          <div className="flex items-center gap-2">
+            <MapPin className="w-4 h-4" />
+            <span>{item.duration}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Navigation className="w-4 h-4" />
+            <span>{item.distance}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4" />
+            <span>{item.travelTime}</span>
+          </div>
+        </div>
+
+        {/* Description */}
+        {item.description && (
+          <p className="text-gray-700">{item.description}</p>
+        )}
+
+        {/* Undo buttons for approved/rejected */}
+        {item.status !== 'pending' && (
+          <button
+            onClick={() => updateItemStatus(item.id, 'pending')}
+            className="mt-3 text-sm text-gray-500 hover:text-gray-700 underline"
+          >
+            Undo
+          </button>
         )}
       </div>
     );
   };
 
   // Upload screen
-  if (!parsedData) {
+  if (items.length === 0 && !tripInfo.title) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center p-8">
         <div className="max-w-xl w-full">
@@ -319,8 +273,8 @@ const Wanderer = () => {
               <p className="text-sm font-medium text-gray-700 mb-2">Tips for best results:</p>
               <ul className="text-xs text-gray-600 space-y-1">
                 <li>Include dates, places, restaurants, and activities</li>
-                <li>Use clear section headers like "Hotels", "Restaurants", "Activities"</li>
                 <li>List items on separate lines</li>
+                <li>Add times like "9:00 AM" for better organization</li>
               </ul>
             </div>
           </div>
@@ -329,21 +283,21 @@ const Wanderer = () => {
     );
   }
 
-  // Parsed data view
+  // Main view with cards
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
       {/* Header */}
       <div className="bg-white shadow-sm sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">
-                {parsedData.title || 'My Trip'}
+                {tripInfo.title || 'My Trip'}
               </h1>
-              {parsedData.dates && (
+              {tripInfo.dates && (
                 <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
                   <Calendar className="w-4 h-4" />
-                  {parsedData.dates}
+                  {tripInfo.dates}
                 </p>
               )}
             </div>
@@ -354,65 +308,57 @@ const Wanderer = () => {
               New Upload
             </button>
           </div>
+
+          {/* Filter tabs */}
+          <div className="flex gap-2">
+            {[
+              { key: 'all', label: 'All' },
+              { key: 'pending', label: 'Pending' },
+              { key: 'approved', label: 'Approved' },
+              { key: 'rejected', label: 'Rejected' }
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setFilter(key)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  filter === key
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {label} ({statusCounts[key]})
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* Content */}
       <div className="max-w-4xl mx-auto px-4 py-6 space-y-4">
-        <SectionCard
-          title="Activities"
-          icon={MapPin}
-          items={parsedData.activities}
-          section="activities"
-          color="blue"
-        />
+        {filteredItems.length === 0 ? (
+          <div className="text-center py-12 text-gray-500">
+            No {filter === 'all' ? '' : filter} items
+          </div>
+        ) : (
+          filteredItems.map(item => (
+            <ItemCard key={item.id} item={item} />
+          ))
+        )}
 
-        <SectionCard
-          title="Dining"
-          icon={Utensils}
-          items={parsedData.dining}
-          section="dining"
-          color="orange"
-        />
-
-        <SectionCard
-          title="Accommodation"
-          icon={Bed}
-          items={parsedData.accommodation}
-          section="accommodation"
-          color="purple"
-        />
-
-        <SectionCard
-          title="Transportation"
-          icon={Clock}
-          items={parsedData.transportation}
-          section="transportation"
-          color="green"
-        />
-
-        <SectionCard
-          title="Notes"
-          icon={FileText}
-          items={parsedData.notes}
-          section="notes"
-          color="gray"
-        />
-
-        {/* Raw content preview */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        {/* Raw content toggle */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mt-8">
           <button
-            onClick={() => toggleSection('raw')}
+            onClick={() => setShowRawContent(!showRawContent)}
             className="w-full px-5 py-4 flex items-center justify-between bg-gray-100 text-gray-700"
           >
             <div className="flex items-center gap-3">
               <FileText className="w-5 h-5" />
               <span className="font-semibold">Original Document</span>
             </div>
-            {expandedSections.raw ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+            {showRawContent ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
           </button>
 
-          {expandedSections.raw && (
+          {showRawContent && (
             <div className="p-4">
               <pre className="text-xs text-gray-600 whitespace-pre-wrap font-mono bg-gray-50 p-4 rounded-lg max-h-64 overflow-auto">
                 {rawContent}
