@@ -1,8 +1,8 @@
-import { Redis } from '@upstash/redis';
+const { Redis } = require('@upstash/redis');
 
 const ITINERARY_KEY = 'wanderer:itinerary';
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -13,17 +13,14 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Support both KV_* and UPSTASH_* environment variable names
-    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+    const url = process.env.KV_REST_API_URL;
+    const token = process.env.KV_REST_API_TOKEN;
 
     if (!url || !token) {
       return res.status(500).json({
         error: 'Database not configured',
-        hasKvUrl: !!process.env.KV_REST_API_URL,
-        hasKvToken: !!process.env.KV_REST_API_TOKEN,
-        hasUpstashUrl: !!process.env.UPSTASH_REDIS_REST_URL,
-        hasUpstashToken: !!process.env.UPSTASH_REDIS_REST_TOKEN
+        hasUrl: !!url,
+        hasToken: !!token
       });
     }
 
@@ -45,4 +42,4 @@ export default async function handler(req, res) {
     console.error('API Error:', error);
     return res.status(500).json({ error: 'Internal server error', details: error.message });
   }
-}
+};
