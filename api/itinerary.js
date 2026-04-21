@@ -1,8 +1,8 @@
-const { neon } = require('@neondatabase/serverless');
+import { neon } from '@neondatabase/serverless';
 
 const ITINERARY_KEY = 'main';
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -13,7 +13,6 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    // Try all possible Neon environment variable names
     const databaseUrl = process.env.POSTGRES_URL_NON_POOLING
       || process.env.POSTGRES_URL
       || process.env.DATABASE_URL;
@@ -21,7 +20,9 @@ module.exports = async function handler(req, res) {
     if (!databaseUrl) {
       return res.status(500).json({
         error: 'Database not configured',
-        availableEnvVars: Object.keys(process.env).filter(k => k.includes('POSTGRES') || k.includes('DATABASE'))
+        availableEnvVars: Object.keys(process.env).filter(k =>
+          k.includes('POSTGRES') || k.includes('DATABASE')
+        )
       });
     }
 
@@ -61,4 +62,4 @@ module.exports = async function handler(req, res) {
     console.error('API Error:', error);
     return res.status(500).json({ error: 'Internal server error', details: error.message });
   }
-};
+}
