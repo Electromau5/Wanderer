@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { Upload, Calendar, Clock, Check, X, ChevronDown, ChevronUp, FileText } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Upload, Calendar, Clock, Check, X, ChevronDown, ChevronUp, FileText, RefreshCw, Loader } from 'lucide-react';
+
+const API_URL = '/api/itinerary';
 
 const Wanderer = () => {
   const [uploadedFile, setUploadedFile] = useState(null);
@@ -8,36 +10,100 @@ const Wanderer = () => {
   const [tripInfo, setTripInfo] = useState({ title: '', dates: '' });
   const [showRawContent, setShowRawContent] = useState(false);
   const [filter, setFilter] = useState('all');
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSynced, setLastSynced] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Category configuration
   const categories = {
     culture: { label: 'Culture', icon: '🏛️', color: 'bg-purple-100 text-purple-700' },
     dining: { label: 'Dining', icon: '🍴', color: 'bg-orange-100 text-orange-700' },
     adventure: { label: 'Adventure', icon: '🏔️', color: 'bg-green-100 text-green-700' },
+    nature: { label: 'Nature', icon: '🌿', color: 'bg-emerald-100 text-emerald-700' },
     shopping: { label: 'Shopping', icon: '🛍️', color: 'bg-pink-100 text-pink-700' },
     nightlife: { label: 'Nightlife', icon: '🍸', color: 'bg-indigo-100 text-indigo-700' },
     accommodation: { label: 'Accommodation', icon: '🏨', color: 'bg-blue-100 text-blue-700' },
     transportation: { label: 'Transportation', icon: '🚗', color: 'bg-teal-100 text-teal-700' },
+    leisure: { label: 'Leisure', icon: '☕', color: 'bg-amber-100 text-amber-700' },
     other: { label: 'Other', icon: '📍', color: 'bg-gray-100 text-gray-700' }
   };
 
-  // Load saved data on mount
-  useEffect(() => {
-    const saved = localStorage.getItem('wanderer-data');
-    if (saved) {
-      const data = JSON.parse(saved);
-      setItems(data.items || []);
-      setTripInfo(data.tripInfo || { title: '', dates: '' });
-      setRawContent(data.rawContent || '');
+  // Fetch data from API
+  const fetchData = useCallback(async () => {
+    try {
+      const response = await fetch(API_URL);
+      if (response.ok) {
+        const data = await response.json();
+        setItems(data.items || []);
+        setTripInfo(data.tripInfo || { title: '', dates: '' });
+        setRawContent(data.rawContent || '');
+        setLastSynced(new Date());
+      }
+    } catch (error) {
+      console.error('Failed to fetch from API, using localStorage:', error);
+      // Fallback to localStorage
+      const saved = localStorage.getItem('wanderer-data');
+      if (saved) {
+        const data = JSON.parse(saved);
+        setItems(data.items || []);
+        setTripInfo(data.tripInfo || { title: '', dates: '' });
+        setRawContent(data.rawContent || '');
+      }
     }
+    setIsLoading(false);
   }, []);
 
-  // Save data when it changes
-  useEffect(() => {
-    if (items.length > 0 || tripInfo.title) {
-      localStorage.setItem('wanderer-data', JSON.stringify({ items, tripInfo, rawContent }));
+  // Save data to API
+  const saveData = useCallback(async (newItems, newTripInfo, newRawContent) => {
+    // Always save to localStorage as backup
+    localStorage.setItem('wanderer-data', JSON.stringify({
+      items: newItems,
+      tripInfo: newTripInfo,
+      rawContent: newRawContent
+    }));
+
+    setIsSyncing(true);
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: newItems,
+          tripInfo: newTripInfo,
+          rawContent: newRawContent
+        }),
+      });
+      if (response.ok) {
+        setLastSynced(new Date());
+      }
+    } catch (error) {
+      console.error('Failed to save to API:', error);
     }
-  }, [items, tripInfo, rawContent]);
+    setIsSyncing(false);
+  }, []);
+
+  // Load data on mount
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Save data when it changes (debounced)
+  useEffect(() => {
+    if (isLoading) return; // Don't save while loading
+    if (items.length > 0 || tripInfo.title) {
+      const timer = setTimeout(() => {
+        saveData(items, tripInfo, rawContent);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [items, tripInfo, rawContent, isLoading, saveData]);
+
+  // Manual refresh
+  const handleRefresh = async () => {
+    setIsSyncing(true);
+    await fetchData();
+    setIsSyncing(false);
+  };
 
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
@@ -62,11 +128,13 @@ const Wanderer = () => {
 
     // Current item being parsed
     let currentItem = null;
+    let currentDay = '';
 
     const saveCurrentItem = () => {
       if (currentItem && currentItem.title) {
         parsedItems.push({
           ...currentItem,
+          day: currentDay,
           id: `item-${Date.now()}-${parsedItems.length}`,
           status: 'pending'
         });
@@ -77,23 +145,34 @@ const Wanderer = () => {
     const normalizeCategory = (cat) => {
       const lower = cat.toLowerCase().trim();
       if (lower.includes('cultur')) return 'culture';
-      if (lower.includes('dining') || lower.includes('food') || lower.includes('restaurant')) return 'dining';
+      if (lower.includes('dining') || lower.includes('food') || lower.includes('restaurant') || lower.includes('drink')) return 'dining';
+      if (lower.includes('nature')) return 'nature';
       if (lower.includes('adventure') || lower.includes('outdoor')) return 'adventure';
       if (lower.includes('shop')) return 'shopping';
       if (lower.includes('night') || lower.includes('bar') || lower.includes('club')) return 'nightlife';
       if (lower.includes('hotel') || lower.includes('accommodation') || lower.includes('stay')) return 'accommodation';
       if (lower.includes('transport') || lower.includes('flight') || lower.includes('travel')) return 'transportation';
+      if (lower.includes('leisure') || lower.includes('relax')) return 'leisure';
       return 'other';
     };
 
     lines.forEach((line, index) => {
-      // Check for labeled fields (case insensitive)
-      const titleMatch = line.match(/^(?:•\s*)?Title\s*:\s*(.+)/i);
-      const categoryMatch = line.match(/^(?:•\s*)?Category\s*:\s*(.+)/i);
-      const arrivalTimeMatch = line.match(/^(?:•\s*)?Arrival\s*Time\s*:\s*(.+)/i);
-      const descriptionMatch = line.match(/^(?:•\s*)?Description\s*:\s*(.+)/i);
+      // Check for day markers (e.g., "Day : Day 1 - Apr 22" or "Day 1 - Apr 22")
+      const dayMatch = line.match(/^Day\s*:\s*(.+)/i) || line.match(/^(Day\s*\d+.*)/i);
 
-      if (titleMatch) {
+      // Check for labeled fields (case insensitive)
+      // Supports bullets: *, •, -, or none. Flexible spacing around colons.
+      const titleMatch = line.match(/^(?:[*•\-]\s*)?Title\s*:\s*(.+)/i);
+      const categoryMatch = line.match(/^(?:[*•\-]\s*)?Category\s*:\s*(.+)/i);
+      const arrivalTimeMatch = line.match(/^(?:[*•\-]\s*)?Arrival\s*Time\s*:\s*(.+)/i);
+      const descriptionMatch = line.match(/^(?:[*•\-]\s*)?Description\s*:\s*(.+)/i);
+
+      if (dayMatch) {
+        // Save previous item if exists
+        saveCurrentItem();
+        // Set current day
+        currentDay = dayMatch[1].trim();
+      } else if (titleMatch) {
         // Save previous item if exists
         saveCurrentItem();
         // Start new item
@@ -109,7 +188,7 @@ const Wanderer = () => {
         currentItem.arrivalTime = arrivalTimeMatch[1].trim();
       } else if (descriptionMatch && currentItem) {
         currentItem.description = descriptionMatch[1].trim();
-      } else if (!currentItem) {
+      } else if (!currentItem && !currentDay) {
         // Try to detect trip title/dates from non-labeled lines at the start
         if (index < 5 && !tripTitle && line.length > 3 && line.length < 100) {
           const datePattern = /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})|(\w+\s+\d{1,2},?\s+\d{4})|(\d{4}-\d{2}-\d{2})/gi;
@@ -235,6 +314,18 @@ const Wanderer = () => {
     );
   };
 
+  // Loading screen
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Loading itinerary...</p>
+        </div>
+      </div>
+    );
+  }
+
   // Upload screen
   if (items.length === 0 && !tripInfo.title) {
     return (
@@ -271,15 +362,19 @@ const Wanderer = () => {
             <div className="mt-6 p-4 bg-gray-50 rounded-lg">
               <p className="text-sm font-medium text-gray-700 mb-2">Document format:</p>
               <pre className="text-xs text-gray-600 font-mono bg-white p-3 rounded border">
-{`Title: Activity Name
-• Category: Dining
-• Arrival Time: 8:30 PM
-• Description: Your description here
+{`Day : Day 1 - Apr 22
+
+Title: Activity Name
+* Category: Dining
+* Arrival Time: 8:30 PM
+* Description: Your description
+
+Day : Day 2 - Apr 23
 
 Title: Next Activity
-• Category: Culture
-• Arrival Time: 10:00 AM
-• Description: Another description`}
+* Category: Culture
+* Arrival Time: 10:00 AM
+* Description: Another description`}
               </pre>
             </div>
           </div>
@@ -306,12 +401,33 @@ Title: Next Activity
                 </p>
               )}
             </div>
-            <button
-              onClick={clearAll}
-              className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              New Upload
-            </button>
+            <div className="flex items-center gap-3">
+              {/* Sync status */}
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                {isSyncing ? (
+                  <Loader className="w-4 h-4 animate-spin" />
+                ) : (
+                  <button
+                    onClick={handleRefresh}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    title="Refresh to see partner's changes"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+                )}
+                {lastSynced && (
+                  <span className="hidden sm:inline text-xs">
+                    Synced {lastSynced.toLocaleTimeString()}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={clearAll}
+                className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                New Upload
+              </button>
+            </div>
           </div>
 
           {/* Filter tabs */}
@@ -339,15 +455,36 @@ Title: Next Activity
       </div>
 
       {/* Content */}
-      <div className="max-w-4xl mx-auto px-4 py-6 space-y-4">
+      <div className="max-w-4xl mx-auto px-4 py-6">
         {filteredItems.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
             No {filter === 'all' ? '' : filter} items
           </div>
         ) : (
-          filteredItems.map(item => (
-            <ItemCard key={item.id} item={item} />
-          ))
+          // Group items by day
+          (() => {
+            const groupedByDay = filteredItems.reduce((acc, item) => {
+              const day = item.day || 'Unassigned';
+              if (!acc[day]) acc[day] = [];
+              acc[day].push(item);
+              return acc;
+            }, {});
+
+            return Object.entries(groupedByDay).map(([day, dayItems]) => (
+              <div key={day} className="mb-8">
+                {/* Day Header */}
+                <div className="sticky top-[140px] z-[5] bg-gradient-to-r from-blue-600 to-purple-600 text-white px-5 py-3 rounded-lg mb-4 shadow-md">
+                  <h2 className="text-lg font-bold">{day}</h2>
+                </div>
+                {/* Day Items */}
+                <div className="space-y-4">
+                  {dayItems.map(item => (
+                    <ItemCard key={item.id} item={item} />
+                  ))}
+                </div>
+              </div>
+            ));
+          })()
         )}
 
         {/* Raw content toggle */}
