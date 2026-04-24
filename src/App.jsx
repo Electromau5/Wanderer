@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Upload, Calendar, Clock, Check, X, ChevronDown, ChevronUp, FileText, RefreshCw, Loader } from 'lucide-react';
+import { Upload, Calendar, Clock, Check, X, ChevronDown, ChevronUp, FileText, RefreshCw, Loader, ArrowRightLeft } from 'lucide-react';
 
 const API_URL = '/api/itinerary';
 
@@ -226,6 +226,15 @@ const Wanderer = () => {
     ));
   };
 
+  const moveItemToDay = (itemId, newDay) => {
+    setItems(prev => prev.map(item =>
+      item.id === itemId ? { ...item, day: newDay } : item
+    ));
+  };
+
+  // Get unique days for the move dropdown
+  const uniqueDays = [...new Set(items.map(item => item.day).filter(Boolean))];
+
   const clearAll = () => {
     setUploadedFile(null);
     setRawContent('');
@@ -248,12 +257,16 @@ const Wanderer = () => {
 
   // Item Card Component
   const ItemCard = ({ item }) => {
+    const [showMoveMenu, setShowMoveMenu] = useState(false);
     const category = categories[item.category] || categories.other;
     const statusStyles = {
       pending: 'bg-slate-50 border-slate-200',
       approved: 'bg-green-50 border-green-200',
       rejected: 'bg-red-50 border-red-200 opacity-60'
     };
+
+    // Days available to move to (excluding current day)
+    const availableDays = uniqueDays.filter(day => day !== item.day);
 
     return (
       <div className={`rounded-xl border-2 p-5 transition-all ${statusStyles[item.status]}`}>
@@ -292,12 +305,45 @@ const Wanderer = () => {
           )}
         </div>
 
-        {/* Category Badge */}
-        <div className="mb-4">
+        {/* Category Badge + Move Button */}
+        <div className="flex items-center gap-3 mb-4">
           <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium ${category.color}`}>
             <span>{category.icon}</span>
             {category.label}
           </span>
+
+          {/* Move to different day */}
+          {availableDays.length > 0 && (
+            <div className="relative">
+              <button
+                onClick={() => setShowMoveMenu(!showMoveMenu)}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+              >
+                <ArrowRightLeft className="w-3.5 h-3.5" />
+                Move
+              </button>
+
+              {showMoveMenu && (
+                <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 min-w-[200px]">
+                  <div className="p-2">
+                    <p className="text-xs text-gray-500 px-2 py-1 font-medium">Move to:</p>
+                    {availableDays.map(day => (
+                      <button
+                        key={day}
+                        onClick={() => {
+                          moveItemToDay(item.id, day);
+                          setShowMoveMenu(false);
+                        }}
+                        className="w-full text-left px-3 py-2 text-sm rounded-md hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                      >
+                        {day}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Arrival Time */}
