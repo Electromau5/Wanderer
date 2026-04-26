@@ -18,6 +18,7 @@ const Wanderer = () => {
   const [archivedDays, setArchivedDays] = useState({});
   const [showAddModal, setShowAddModal] = useState(false);
   const [showArchivedSection, setShowArchivedSection] = useState(false);
+  const [showCompletedSection, setShowCompletedSection] = useState(false);
   const [newCardForm, setNewCardForm] = useState({
     title: '',
     category: 'other',
@@ -351,7 +352,11 @@ const Wanderer = () => {
     localStorage.removeItem('wanderer-data');
   };
 
-  const filteredItems = items.filter(item => {
+  // Filter items: exclude completed items from main view
+  const activeItems = items.filter(item => item.status !== 'completed');
+  const completedItems = items.filter(item => item.status === 'completed');
+
+  const filteredItems = activeItems.filter(item => {
     if (categoryFilter === 'all') return true;
     return item.category === categoryFilter;
   });
@@ -381,7 +386,7 @@ const Wanderer = () => {
     const category = categories[item.category] || categories.other;
     const statusStyles = {
       pending: 'bg-slate-50 border-slate-200',
-      approved: 'bg-green-50 border-green-200'
+      completed: 'bg-green-50 border-green-200'
     };
 
     // Days available to move to (excluding current day)
@@ -554,11 +559,11 @@ const Wanderer = () => {
                 <Pencil className="w-4 h-4" />
               </button>
               <button
-                onClick={() => updateItemStatus(item.id, 'approved')}
+                onClick={() => updateItemStatus(item.id, 'completed')}
                 className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
               >
                 <Check className="w-4 h-4" />
-                Approve
+                Complete
               </button>
               <button
                 onClick={() => deleteItem(item.id)}
@@ -569,14 +574,15 @@ const Wanderer = () => {
               </button>
             </div>
           )}
-          {item.status === 'approved' && (
+          {item.status === 'completed' && (
             <div className="flex gap-2 flex-shrink-0">
               <button
-                onClick={() => setIsEditing(true)}
+                onClick={() => updateItemStatus(item.id, 'pending')}
                 className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
-                title="Edit"
+                title="Restore to pending"
               >
-                <Pencil className="w-4 h-4" />
+                <Archive className="w-4 h-4" />
+                Restore
               </button>
               <button
                 onClick={() => deleteItem(item.id)}
@@ -587,7 +593,7 @@ const Wanderer = () => {
               </button>
               <span className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium">
                 <Check className="w-4 h-4" />
-                Approved
+                Completed
               </span>
             </div>
           )}
@@ -645,16 +651,6 @@ const Wanderer = () => {
         {/* Description */}
         {item.description && (
           <p className="text-gray-700 leading-relaxed">{item.description}</p>
-        )}
-
-        {/* Undo button for approved items */}
-        {item.status === 'approved' && (
-          <button
-            onClick={() => updateItemStatus(item.id, 'pending')}
-            className="mt-3 text-sm text-gray-500 hover:text-gray-700 underline"
-          >
-            Undo
-          </button>
         )}
       </div>
     );
@@ -885,7 +881,31 @@ Title: Next Activity
                 ))
               )}
 
-              {/* Archived Section */}
+              {/* Completed Activities Section */}
+              {completedItems.length > 0 && (
+                <div className="mt-8">
+                  <button
+                    onClick={() => setShowCompletedSection(!showCompletedSection)}
+                    className="w-full flex items-center justify-between px-5 py-4 bg-green-100 text-green-800 rounded-lg hover:bg-green-200 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Check className="w-5 h-5" />
+                      <span className="font-semibold">Completed ({completedItems.length} {completedItems.length === 1 ? 'activity' : 'activities'})</span>
+                    </div>
+                    {showCompletedSection ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                  </button>
+
+                  {showCompletedSection && (
+                    <div className="mt-4 space-y-4 opacity-70">
+                      {completedItems.map(item => (
+                        <ItemCard key={item.id} item={item} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Archived Days Section */}
               {archivedDaysList.length > 0 && (
                 <div className="mt-8">
                   <button
@@ -894,7 +914,7 @@ Title: Next Activity
                   >
                     <div className="flex items-center gap-3">
                       <Archive className="w-5 h-5" />
-                      <span className="font-semibold">Archived ({archivedDaysList.length} {archivedDaysList.length === 1 ? 'day' : 'days'})</span>
+                      <span className="font-semibold">Archived Days ({archivedDaysList.length} {archivedDaysList.length === 1 ? 'day' : 'days'})</span>
                     </div>
                     {showArchivedSection ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
                   </button>
