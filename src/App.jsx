@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Upload, Calendar, Clock, Check, X, ChevronDown, ChevronUp, FileText, RefreshCw, Loader, ArrowRightLeft } from 'lucide-react';
+import { Upload, Calendar, Clock, Check, X, ChevronDown, ChevronUp, FileText, RefreshCw, Loader, ArrowRightLeft, Pencil, Save, Plus, Trash2 } from 'lucide-react';
 
 const API_URL = '/api/itinerary';
 
@@ -13,9 +13,11 @@ const Wanderer = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [collapsedDays, setCollapsedDays] = useState({});
+  const [customCategories, setCustomCategories] = useState({});
 
-  // Category configuration
-  const categories = {
+  // Default category configuration
+  const defaultCategories = {
     culture: { label: 'Culture', icon: '🏛️', color: 'bg-purple-100 text-purple-700' },
     dining: { label: 'Dining', icon: '🍴', color: 'bg-orange-100 text-orange-700' },
     adventure: { label: 'Adventure', icon: '🏔️', color: 'bg-green-100 text-green-700' },
@@ -28,6 +30,34 @@ const Wanderer = () => {
     other: { label: 'Other', icon: '📍', color: 'bg-gray-100 text-gray-700' }
   };
 
+  // Merge default and custom categories
+  const categories = { ...defaultCategories, ...customCategories };
+
+  // Toggle day section collapse/expand
+  const toggleDayCollapse = (day) => {
+    setCollapsedDays(prev => ({
+      ...prev,
+      [day]: !prev[day]
+    }));
+  };
+
+  // Add a new custom category
+  const addCustomCategory = (key, label) => {
+    const colors = [
+      'bg-rose-100 text-rose-700',
+      'bg-cyan-100 text-cyan-700',
+      'bg-violet-100 text-violet-700',
+      'bg-lime-100 text-lime-700',
+      'bg-fuchsia-100 text-fuchsia-700',
+      'bg-sky-100 text-sky-700'
+    ];
+    const randomColor = colors[Object.keys(customCategories).length % colors.length];
+    setCustomCategories(prev => ({
+      ...prev,
+      [key]: { label, icon: '🏷️', color: randomColor }
+    }));
+  };
+
   // Fetch data from API
   const fetchData = useCallback(async () => {
     try {
@@ -37,6 +67,8 @@ const Wanderer = () => {
         setItems(data.items || []);
         setTripInfo(data.tripInfo || { title: '', dates: '' });
         setRawContent(data.rawContent || '');
+        setCustomCategories(data.customCategories || {});
+        setCollapsedDays(data.collapsedDays || {});
         setLastSynced(new Date());
       }
     } catch (error) {
@@ -48,18 +80,22 @@ const Wanderer = () => {
         setItems(data.items || []);
         setTripInfo(data.tripInfo || { title: '', dates: '' });
         setRawContent(data.rawContent || '');
+        setCustomCategories(data.customCategories || {});
+        setCollapsedDays(data.collapsedDays || {});
       }
     }
     setIsLoading(false);
   }, []);
 
   // Save data to API
-  const saveData = useCallback(async (newItems, newTripInfo, newRawContent) => {
+  const saveData = useCallback(async (newItems, newTripInfo, newRawContent, newCustomCategories, newCollapsedDays) => {
     // Always save to localStorage as backup
     localStorage.setItem('wanderer-data', JSON.stringify({
       items: newItems,
       tripInfo: newTripInfo,
-      rawContent: newRawContent
+      rawContent: newRawContent,
+      customCategories: newCustomCategories,
+      collapsedDays: newCollapsedDays
     }));
 
     setIsSyncing(true);
@@ -70,7 +106,9 @@ const Wanderer = () => {
         body: JSON.stringify({
           items: newItems,
           tripInfo: newTripInfo,
-          rawContent: newRawContent
+          rawContent: newRawContent,
+          customCategories: newCustomCategories,
+          collapsedDays: newCollapsedDays
         }),
       });
       if (response.ok) {
@@ -92,11 +130,11 @@ const Wanderer = () => {
     if (isLoading) return; // Don't save while loading
     if (items.length > 0 || tripInfo.title) {
       const timer = setTimeout(() => {
-        saveData(items, tripInfo, rawContent);
+        saveData(items, tripInfo, rawContent, customCategories, collapsedDays);
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [items, tripInfo, rawContent, isLoading, saveData]);
+  }, [items, tripInfo, rawContent, customCategories, collapsedDays, isLoading, saveData]);
 
   // Manual refresh
   const handleRefresh = async () => {
@@ -232,6 +270,18 @@ const Wanderer = () => {
     ));
   };
 
+  // Update item details (for editing)
+  const updateItemDetails = (itemId, updates) => {
+    setItems(prev => prev.map(item =>
+      item.id === itemId ? { ...item, ...updates } : item
+    ));
+  };
+
+  // Delete an item
+  const deleteItem = (itemId) => {
+    setItems(prev => prev.filter(item => item.id !== itemId));
+  };
+
   // Get unique days for the move dropdown
   const uniqueDays = [...new Set(items.map(item => item.day).filter(Boolean))];
 
@@ -240,6 +290,8 @@ const Wanderer = () => {
     setRawContent('');
     setItems([]);
     setTripInfo({ title: '', dates: '' });
+    setCustomCategories({});
+    setCollapsedDays({});
     localStorage.removeItem('wanderer-data');
   };
 
@@ -251,30 +303,197 @@ const Wanderer = () => {
   const statusCounts = {
     all: items.length,
     pending: items.filter(i => i.status === 'pending').length,
-    approved: items.filter(i => i.status === 'approved').length,
-    rejected: items.filter(i => i.status === 'rejected').length
+    approved: items.filter(i => i.status === 'approved').length
   };
 
   // Item Card Component
   const ItemCard = ({ item }) => {
     const [showMoveMenu, setShowMoveMenu] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+    const [newTagInput, setNewTagInput] = useState('');
+    const [editForm, setEditForm] = useState({
+      title: item.title,
+      category: item.category,
+      arrivalTime: item.arrivalTime || '',
+      description: item.description || ''
+    });
+
     const category = categories[item.category] || categories.other;
     const statusStyles = {
       pending: 'bg-slate-50 border-slate-200',
-      approved: 'bg-green-50 border-green-200',
-      rejected: 'bg-red-50 border-red-200 opacity-60'
+      approved: 'bg-green-50 border-green-200'
     };
 
     // Days available to move to (excluding current day)
     const availableDays = uniqueDays.filter(day => day !== item.day);
 
+    const handleSaveEdit = () => {
+      updateItemDetails(item.id, editForm);
+      setIsEditing(false);
+    };
+
+    const handleCancelEdit = () => {
+      setEditForm({
+        title: item.title,
+        category: item.category,
+        arrivalTime: item.arrivalTime || '',
+        description: item.description || ''
+      });
+      setIsEditing(false);
+      setShowCategoryDropdown(false);
+      setNewTagInput('');
+    };
+
+    const handleAddNewTag = () => {
+      if (newTagInput.trim()) {
+        const key = newTagInput.toLowerCase().trim().replace(/\s+/g, '_');
+        addCustomCategory(key, newTagInput.trim());
+        setEditForm(prev => ({ ...prev, category: key }));
+        setNewTagInput('');
+        setShowCategoryDropdown(false);
+      }
+    };
+
+    // Edit mode view
+    if (isEditing) {
+      return (
+        <div className={`rounded-xl border-2 p-5 transition-all ${statusStyles[item.status] || statusStyles.pending}`}>
+          {/* Edit Header */}
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-700">Edit Activity</h3>
+            <div className="flex gap-2">
+              <button
+                onClick={handleCancelEdit}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors"
+              >
+                <X className="w-4 h-4" />
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+              >
+                <Save className="w-4 h-4" />
+                Save
+              </button>
+            </div>
+          </div>
+
+          {/* Title Input */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-600 mb-1">Title</label>
+            <input
+              type="text"
+              value={editForm.title}
+              onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              placeholder="Activity title"
+            />
+          </div>
+
+          {/* Category Dropdown */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-600 mb-1">Category / Tag</label>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-left flex items-center justify-between bg-white hover:bg-gray-50"
+              >
+                <span className="flex items-center gap-2">
+                  <span>{(categories[editForm.category] || categories.other).icon}</span>
+                  {(categories[editForm.category] || categories.other).label}
+                </span>
+                <ChevronDown className="w-4 h-4 text-gray-400" />
+              </button>
+
+              {showCategoryDropdown && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-30 max-h-64 overflow-y-auto">
+                  <div className="p-2">
+                    {Object.entries(categories).map(([key, cat]) => (
+                      <button
+                        key={key}
+                        onClick={() => {
+                          setEditForm(prev => ({ ...prev, category: key }));
+                          setShowCategoryDropdown(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 text-sm rounded-md flex items-center gap-2 transition-colors ${
+                          editForm.category === key ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50'
+                        }`}
+                      >
+                        <span>{cat.icon}</span>
+                        {cat.label}
+                      </button>
+                    ))}
+                    {/* Add new tag */}
+                    <div className="border-t border-gray-200 mt-2 pt-2">
+                      <div className="flex gap-2 px-1">
+                        <input
+                          type="text"
+                          value={newTagInput}
+                          onChange={(e) => setNewTagInput(e.target.value)}
+                          placeholder="New tag name..."
+                          className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 outline-none"
+                          onKeyDown={(e) => e.key === 'Enter' && handleAddNewTag()}
+                        />
+                        <button
+                          onClick={handleAddNewTag}
+                          disabled={!newTagInput.trim()}
+                          className="px-2 py-1.5 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Time Input */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-600 mb-1">Arrival Time</label>
+            <input
+              type="text"
+              value={editForm.arrivalTime}
+              onChange={(e) => setEditForm(prev => ({ ...prev, arrivalTime: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              placeholder="e.g. 8:30 PM"
+            />
+          </div>
+
+          {/* Description Input */}
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Description</label>
+            <textarea
+              value={editForm.description}
+              onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
+              rows={3}
+              placeholder="Activity description"
+            />
+          </div>
+        </div>
+      );
+    }
+
+    // Normal view
     return (
-      <div className={`rounded-xl border-2 p-5 transition-all ${statusStyles[item.status]}`}>
+      <div className={`rounded-xl border-2 p-5 transition-all ${statusStyles[item.status] || statusStyles.pending}`}>
         {/* Header: Title + Buttons */}
         <div className="flex items-start justify-between gap-4 mb-3">
           <h3 className="text-xl font-bold text-gray-900 flex-1">{item.title}</h3>
           {item.status === 'pending' && (
             <div className="flex gap-2 flex-shrink-0">
+              <button
+                onClick={() => setIsEditing(true)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+                title="Edit"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
               <button
                 onClick={() => updateItemStatus(item.id, 'approved')}
                 className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
@@ -283,25 +502,28 @@ const Wanderer = () => {
                 Approve
               </button>
               <button
-                onClick={() => updateItemStatus(item.id, 'rejected')}
+                onClick={() => deleteItem(item.id)}
                 className="flex items-center gap-1.5 px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors"
               >
-                <X className="w-4 h-4" />
+                <Trash2 className="w-4 h-4" />
                 Reject
               </button>
             </div>
           )}
           {item.status === 'approved' && (
-            <span className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium">
-              <Check className="w-4 h-4" />
-              Approved
-            </span>
-          )}
-          {item.status === 'rejected' && (
-            <span className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white rounded-lg text-sm font-medium">
-              <X className="w-4 h-4" />
-              Rejected
-            </span>
+            <div className="flex gap-2 flex-shrink-0">
+              <button
+                onClick={() => setIsEditing(true)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+                title="Edit"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+              <span className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium">
+                <Check className="w-4 h-4" />
+                Approved
+              </span>
+            </div>
           )}
         </div>
 
@@ -359,8 +581,8 @@ const Wanderer = () => {
           <p className="text-gray-700 leading-relaxed">{item.description}</p>
         )}
 
-        {/* Undo button for approved/rejected */}
-        {item.status !== 'pending' && (
+        {/* Undo button for approved items */}
+        {item.status === 'approved' && (
           <button
             onClick={() => updateItemStatus(item.id, 'pending')}
             className="mt-3 text-sm text-gray-500 hover:text-gray-700 underline"
@@ -493,8 +715,7 @@ Title: Next Activity
             {[
               { key: 'all', label: 'All' },
               { key: 'pending', label: 'Pending' },
-              { key: 'approved', label: 'Approved' },
-              { key: 'rejected', label: 'Rejected' }
+              { key: 'approved', label: 'Approved' }
             ].map(({ key, label }) => (
               <button
                 key={key}
@@ -530,16 +751,31 @@ Title: Next Activity
 
             return Object.entries(groupedByDay).map(([day, dayItems]) => (
               <div key={day} className="mb-8">
-                {/* Day Header */}
-                <div className="sticky top-[140px] z-[5] bg-gradient-to-r from-blue-600 to-purple-600 text-white px-5 py-3 rounded-lg mb-4 shadow-md">
+                {/* Day Header with Accordion Toggle */}
+                <button
+                  onClick={() => toggleDayCollapse(day)}
+                  className="w-full sticky top-[140px] z-[5] bg-gradient-to-r from-blue-600 to-purple-600 text-white px-5 py-3 rounded-lg mb-4 shadow-md flex items-center justify-between hover:from-blue-700 hover:to-purple-700 transition-all"
+                >
                   <h2 className="text-lg font-bold">{day}</h2>
-                </div>
-                {/* Day Items */}
-                <div className="space-y-4">
-                  {dayItems.map(item => (
-                    <ItemCard key={item.id} item={item} />
-                  ))}
-                </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm opacity-80">
+                      {dayItems.length} {dayItems.length === 1 ? 'activity' : 'activities'}
+                    </span>
+                    {collapsedDays[day] ? (
+                      <ChevronDown className="w-5 h-5" />
+                    ) : (
+                      <ChevronUp className="w-5 h-5" />
+                    )}
+                  </div>
+                </button>
+                {/* Day Items - Collapsible */}
+                {!collapsedDays[day] && (
+                  <div className="space-y-4">
+                    {dayItems.map(item => (
+                      <ItemCard key={item.id} item={item} />
+                    ))}
+                  </div>
+                )}
               </div>
             ));
           })()
