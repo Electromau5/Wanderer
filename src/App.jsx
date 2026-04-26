@@ -17,6 +17,7 @@ const Wanderer = () => {
   const [customCategories, setCustomCategories] = useState({});
   const [archivedDays, setArchivedDays] = useState({});
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showArchivedSection, setShowArchivedSection] = useState(false);
   const [newCardForm, setNewCardForm] = useState({
     title: '',
     category: 'other',
@@ -24,6 +25,13 @@ const Wanderer = () => {
     description: '',
     day: ''
   });
+
+  // Open add modal for a specific day
+  const openAddModalForDay = (day, e) => {
+    e.stopPropagation();
+    setNewCardForm(prev => ({ ...prev, day }));
+    setShowAddModal(true);
+  };
 
   // Default category configuration
   const defaultCategories = {
@@ -804,70 +812,138 @@ Title: Next Activity
 
       {/* Content */}
       <div className="max-w-4xl mx-auto px-4 py-6">
-        {filteredItems.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            No {categoryFilter === 'all' ? '' : (categories[categoryFilter]?.label || '')} items
-          </div>
-        ) : (
+        {(() => {
           // Group items by day
-          (() => {
-            const groupedByDay = filteredItems.reduce((acc, item) => {
-              const day = item.day || 'Unassigned';
-              if (!acc[day]) acc[day] = [];
-              acc[day].push(item);
-              return acc;
-            }, {});
+          const groupedByDay = filteredItems.reduce((acc, item) => {
+            const day = item.day || 'Unassigned';
+            if (!acc[day]) acc[day] = [];
+            acc[day].push(item);
+            return acc;
+          }, {});
 
-            return Object.entries(groupedByDay).map(([day, dayItems]) => {
-              const isArchived = archivedDays[day];
-              return (
-              <div key={day} className={`mb-8 transition-opacity ${isArchived ? 'opacity-50' : ''}`}>
-                {/* Day Header with Accordion Toggle */}
-                <div
-                  className={`sticky top-[140px] z-[5] text-white px-5 py-3 rounded-lg mb-4 shadow-md flex items-center justify-between transition-all ${
-                    isArchived
-                      ? 'bg-gradient-to-r from-gray-500 to-gray-600'
-                      : 'bg-gradient-to-r from-blue-600 to-purple-600'
-                  }`}
-                >
-                  <button
-                    onClick={() => toggleDayCollapse(day)}
-                    className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-                  >
-                    <h2 className="text-lg font-bold">{day}</h2>
-                    <span className="text-sm opacity-80">
-                      ({dayItems.length} {dayItems.length === 1 ? 'activity' : 'activities'})
-                    </span>
-                    {collapsedDays[day] ? (
-                      <ChevronDown className="w-5 h-5" />
-                    ) : (
-                      <ChevronUp className="w-5 h-5" />
-                    )}
-                  </button>
-                  <button
-                    onClick={(e) => toggleArchiveDay(day, e)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      isArchived
-                        ? 'bg-white/20 hover:bg-white/30'
-                        : 'bg-white/20 hover:bg-white/30'
-                    }`}
-                  >
-                    <Archive className="w-4 h-4" />
-                    {isArchived ? 'Unarchive' : 'Mark Complete'}
-                  </button>
+          // Separate active and archived days
+          const activeDays = Object.entries(groupedByDay).filter(([day]) => !archivedDays[day]);
+          const archivedDaysList = Object.entries(groupedByDay).filter(([day]) => archivedDays[day]);
+
+          return (
+            <>
+              {/* Active Days */}
+              {activeDays.length === 0 && archivedDaysList.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  No {categoryFilter === 'all' ? '' : (categories[categoryFilter]?.label || '')} items
                 </div>
-                {/* Day Items - Collapsible */}
-                {!collapsedDays[day] && (
-                  <div className="space-y-4">
-                    {dayItems.map(item => (
-                      <ItemCard key={item.id} item={item} />
-                    ))}
+              ) : activeDays.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  All days are archived
+                </div>
+              ) : (
+                activeDays.map(([day, dayItems]) => (
+                  <div key={day} className="mb-8">
+                    {/* Day Header */}
+                    <div className="sticky top-[140px] z-[5] bg-gradient-to-r from-blue-600 to-purple-600 text-white px-5 py-3 rounded-lg mb-4 shadow-md flex items-center justify-between">
+                      <button
+                        onClick={() => toggleDayCollapse(day)}
+                        className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                      >
+                        <h2 className="text-lg font-bold">{day}</h2>
+                        <span className="text-sm opacity-80">
+                          ({dayItems.length} {dayItems.length === 1 ? 'activity' : 'activities'})
+                        </span>
+                        {collapsedDays[day] ? (
+                          <ChevronDown className="w-5 h-5" />
+                        ) : (
+                          <ChevronUp className="w-5 h-5" />
+                        )}
+                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => openAddModalForDay(day, e)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-white/20 hover:bg-white/30 transition-colors"
+                          title="Add activity to this day"
+                        >
+                          <Plus className="w-4 h-4" />
+                          Add
+                        </button>
+                        <button
+                          onClick={(e) => toggleArchiveDay(day, e)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-white/20 hover:bg-white/30 transition-colors"
+                        >
+                          <Archive className="w-4 h-4" />
+                          Complete
+                        </button>
+                      </div>
+                    </div>
+                    {/* Day Items - Collapsible */}
+                    {!collapsedDays[day] && (
+                      <div className="space-y-4">
+                        {dayItems.map(item => (
+                          <ItemCard key={item.id} item={item} />
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            );});
-          })()
-        )}
+                ))
+              )}
+
+              {/* Archived Section */}
+              {archivedDaysList.length > 0 && (
+                <div className="mt-8">
+                  <button
+                    onClick={() => setShowArchivedSection(!showArchivedSection)}
+                    className="w-full flex items-center justify-between px-5 py-4 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Archive className="w-5 h-5" />
+                      <span className="font-semibold">Archived ({archivedDaysList.length} {archivedDaysList.length === 1 ? 'day' : 'days'})</span>
+                    </div>
+                    {showArchivedSection ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                  </button>
+
+                  {showArchivedSection && (
+                    <div className="mt-4 space-y-6 opacity-60">
+                      {archivedDaysList.map(([day, dayItems]) => (
+                        <div key={day} className="mb-6">
+                          {/* Archived Day Header */}
+                          <div className="bg-gradient-to-r from-gray-500 to-gray-600 text-white px-5 py-3 rounded-lg mb-4 shadow-md flex items-center justify-between">
+                            <button
+                              onClick={() => toggleDayCollapse(day)}
+                              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                            >
+                              <h2 className="text-lg font-bold">{day}</h2>
+                              <span className="text-sm opacity-80">
+                                ({dayItems.length} {dayItems.length === 1 ? 'activity' : 'activities'})
+                              </span>
+                              {collapsedDays[day] ? (
+                                <ChevronDown className="w-5 h-5" />
+                              ) : (
+                                <ChevronUp className="w-5 h-5" />
+                              )}
+                            </button>
+                            <button
+                              onClick={(e) => toggleArchiveDay(day, e)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-white/20 hover:bg-white/30 transition-colors"
+                            >
+                              <Archive className="w-4 h-4" />
+                              Restore
+                            </button>
+                          </div>
+                          {/* Archived Day Items */}
+                          {!collapsedDays[day] && (
+                            <div className="space-y-4">
+                              {dayItems.map(item => (
+                                <ItemCard key={item.id} item={item} />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          );
+        })()}
 
         {/* Raw content toggle */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mt-8">
