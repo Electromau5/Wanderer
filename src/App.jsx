@@ -763,12 +763,18 @@ Title: Next Activity
               return acc;
             }, {});
 
-            return Object.entries(groupedByDay).map(([day, dayItems]) => (
-              <div key={day} className="mb-8">
+            return Object.entries(groupedByDay).map(([day, dayItems]) => {
+              const isCompleted = dayItems.every(item => item.status === 'approved');
+              return (
+              <div key={day} className={`mb-8 transition-opacity ${isCompleted ? 'opacity-50' : ''}`}>
                 {/* Day Header with Accordion Toggle */}
                 <button
                   onClick={() => toggleDayCollapse(day)}
-                  className="w-full sticky top-[140px] z-[5] bg-gradient-to-r from-blue-600 to-purple-600 text-white px-5 py-3 rounded-lg mb-4 shadow-md flex items-center justify-between hover:from-blue-700 hover:to-purple-700 transition-all"
+                  className={`w-full sticky top-[140px] z-[5] text-white px-5 py-3 rounded-lg mb-4 shadow-md flex items-center justify-between transition-all ${
+                    isCompleted
+                      ? 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700'
+                      : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700'
+                  }`}
                 >
                   <h2 className="text-lg font-bold">{day}</h2>
                   <div className="flex items-center gap-2">
@@ -791,7 +797,7 @@ Title: Next Activity
                   </div>
                 )}
               </div>
-            ));
+            );});
           })()
         )}
 
