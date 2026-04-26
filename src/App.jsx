@@ -15,6 +15,14 @@ const Wanderer = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [collapsedDays, setCollapsedDays] = useState({});
   const [customCategories, setCustomCategories] = useState({});
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newCardForm, setNewCardForm] = useState({
+    title: '',
+    category: 'other',
+    arrivalTime: '',
+    description: '',
+    day: ''
+  });
 
   // Default category configuration
   const defaultCategories = {
@@ -282,6 +290,31 @@ const Wanderer = () => {
     setItems(prev => prev.filter(item => item.id !== itemId));
   };
 
+  // Add a new item
+  const addNewItem = () => {
+    if (!newCardForm.title.trim()) return;
+
+    const newItem = {
+      id: `item-${Date.now()}-${items.length}`,
+      title: newCardForm.title.trim(),
+      category: newCardForm.category,
+      arrivalTime: newCardForm.arrivalTime.trim(),
+      description: newCardForm.description.trim(),
+      day: newCardForm.day || uniqueDays[0] || 'Day 1',
+      status: 'pending'
+    };
+
+    setItems(prev => [...prev, newItem]);
+    setNewCardForm({
+      title: '',
+      category: 'other',
+      arrivalTime: '',
+      description: '',
+      day: ''
+    });
+    setShowAddModal(false);
+  };
+
   // Get unique days for the move dropdown
   const uniqueDays = [...new Set(items.map(item => item.day).filter(Boolean))];
 
@@ -521,6 +554,13 @@ const Wanderer = () => {
                 title="Edit"
               >
                 <Pencil className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => deleteItem(item.id)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 text-red-600 rounded-lg font-medium hover:bg-red-50 transition-colors"
+                title="Delete"
+              >
+                <Trash2 className="w-4 h-4" />
               </button>
               <span className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium">
                 <Check className="w-4 h-4" />
@@ -823,6 +863,125 @@ Title: Next Activity
           )}
         </div>
       </div>
+
+      {/* Floating Add Button */}
+      <button
+        onClick={() => setShowAddModal(true)}
+        className="fixed bottom-6 right-6 w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-blue-700 transition-colors z-20"
+        title="Add new activity"
+      >
+        <Plus className="w-6 h-6" />
+      </button>
+
+      {/* Add New Card Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-gray-900">Add New Activity</h2>
+                <button
+                  onClick={() => setShowAddModal(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+
+              {/* Title */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                <input
+                  type="text"
+                  value={newCardForm.title}
+                  onChange={(e) => setNewCardForm(prev => ({ ...prev, title: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  placeholder="Activity name"
+                />
+              </div>
+
+              {/* Day */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Day</label>
+                <select
+                  value={newCardForm.day}
+                  onChange={(e) => setNewCardForm(prev => ({ ...prev, day: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                >
+                  <option value="">Select a day...</option>
+                  {uniqueDays.map(day => (
+                    <option key={day} value={day}>{day}</option>
+                  ))}
+                  <option value="__new__">+ Add new day</option>
+                </select>
+                {newCardForm.day === '__new__' && (
+                  <input
+                    type="text"
+                    onChange={(e) => setNewCardForm(prev => ({ ...prev, day: e.target.value }))}
+                    className="w-full mt-2 px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    placeholder="e.g., Day 3 - Apr 24"
+                  />
+                )}
+              </div>
+
+              {/* Category */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                <select
+                  value={newCardForm.category}
+                  onChange={(e) => setNewCardForm(prev => ({ ...prev, category: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                >
+                  {Object.entries(categories).map(([key, cat]) => (
+                    <option key={key} value={key}>{cat.icon} {cat.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Arrival Time */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Arrival Time</label>
+                <input
+                  type="text"
+                  value={newCardForm.arrivalTime}
+                  onChange={(e) => setNewCardForm(prev => ({ ...prev, arrivalTime: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  placeholder="e.g., 8:30 PM"
+                />
+              </div>
+
+              {/* Description */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <textarea
+                  value={newCardForm.description}
+                  onChange={(e) => setNewCardForm(prev => ({ ...prev, description: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
+                  rows={3}
+                  placeholder="Activity description"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowAddModal(false)}
+                  className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={addNewItem}
+                  disabled={!newCardForm.title.trim()}
+                  className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                >
+                  Add Activity
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
