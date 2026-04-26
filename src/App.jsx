@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Upload, Calendar, Clock, Check, X, ChevronDown, ChevronUp, FileText, RefreshCw, Loader, ArrowRightLeft, Pencil, Save, Plus, Trash2 } from 'lucide-react';
+import { Upload, Calendar, Clock, Check, X, ChevronDown, ChevronUp, FileText, RefreshCw, Loader, ArrowRightLeft, Pencil, Save, Plus, Trash2, Archive } from 'lucide-react';
 
 const API_URL = '/api/itinerary';
 
@@ -15,6 +15,7 @@ const Wanderer = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [collapsedDays, setCollapsedDays] = useState({});
   const [customCategories, setCustomCategories] = useState({});
+  const [archivedDays, setArchivedDays] = useState({});
   const [showAddModal, setShowAddModal] = useState(false);
   const [newCardForm, setNewCardForm] = useState({
     title: '',
@@ -49,6 +50,15 @@ const Wanderer = () => {
     }));
   };
 
+  // Archive/unarchive a day
+  const toggleArchiveDay = (day, e) => {
+    e.stopPropagation();
+    setArchivedDays(prev => ({
+      ...prev,
+      [day]: !prev[day]
+    }));
+  };
+
   // Add a new custom category
   const addCustomCategory = (key, label) => {
     const colors = [
@@ -77,6 +87,7 @@ const Wanderer = () => {
         setRawContent(data.rawContent || '');
         setCustomCategories(data.customCategories || {});
         setCollapsedDays(data.collapsedDays || {});
+        setArchivedDays(data.archivedDays || {});
         setLastSynced(new Date());
       }
     } catch (error) {
@@ -90,20 +101,22 @@ const Wanderer = () => {
         setRawContent(data.rawContent || '');
         setCustomCategories(data.customCategories || {});
         setCollapsedDays(data.collapsedDays || {});
+        setArchivedDays(data.archivedDays || {});
       }
     }
     setIsLoading(false);
   }, []);
 
   // Save data to API
-  const saveData = useCallback(async (newItems, newTripInfo, newRawContent, newCustomCategories, newCollapsedDays) => {
+  const saveData = useCallback(async (newItems, newTripInfo, newRawContent, newCustomCategories, newCollapsedDays, newArchivedDays) => {
     // Always save to localStorage as backup
     localStorage.setItem('wanderer-data', JSON.stringify({
       items: newItems,
       tripInfo: newTripInfo,
       rawContent: newRawContent,
       customCategories: newCustomCategories,
-      collapsedDays: newCollapsedDays
+      collapsedDays: newCollapsedDays,
+      archivedDays: newArchivedDays
     }));
 
     setIsSyncing(true);
@@ -116,7 +129,8 @@ const Wanderer = () => {
           tripInfo: newTripInfo,
           rawContent: newRawContent,
           customCategories: newCustomCategories,
-          collapsedDays: newCollapsedDays
+          collapsedDays: newCollapsedDays,
+          archivedDays: newArchivedDays
         }),
       });
       if (response.ok) {
@@ -138,11 +152,11 @@ const Wanderer = () => {
     if (isLoading) return; // Don't save while loading
     if (items.length > 0 || tripInfo.title) {
       const timer = setTimeout(() => {
-        saveData(items, tripInfo, rawContent, customCategories, collapsedDays);
+        saveData(items, tripInfo, rawContent, customCategories, collapsedDays, archivedDays);
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [items, tripInfo, rawContent, customCategories, collapsedDays, isLoading, saveData]);
+  }, [items, tripInfo, rawContent, customCategories, collapsedDays, archivedDays, isLoading, saveData]);
 
   // Manual refresh
   const handleRefresh = async () => {
@@ -325,6 +339,7 @@ const Wanderer = () => {
     setTripInfo({ title: '', dates: '' });
     setCustomCategories({});
     setCollapsedDays({});
+    setArchivedDays({});
     localStorage.removeItem('wanderer-data');
   };
 
@@ -804,30 +819,43 @@ Title: Next Activity
             }, {});
 
             return Object.entries(groupedByDay).map(([day, dayItems]) => {
-              const isCompleted = dayItems.every(item => item.status === 'approved');
+              const isArchived = archivedDays[day];
               return (
-              <div key={day} className={`mb-8 transition-opacity ${isCompleted ? 'opacity-50' : ''}`}>
+              <div key={day} className={`mb-8 transition-opacity ${isArchived ? 'opacity-50' : ''}`}>
                 {/* Day Header with Accordion Toggle */}
-                <button
-                  onClick={() => toggleDayCollapse(day)}
-                  className={`w-full sticky top-[140px] z-[5] text-white px-5 py-3 rounded-lg mb-4 shadow-md flex items-center justify-between transition-all ${
-                    isCompleted
-                      ? 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700'
-                      : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700'
+                <div
+                  className={`sticky top-[140px] z-[5] text-white px-5 py-3 rounded-lg mb-4 shadow-md flex items-center justify-between transition-all ${
+                    isArchived
+                      ? 'bg-gradient-to-r from-gray-500 to-gray-600'
+                      : 'bg-gradient-to-r from-blue-600 to-purple-600'
                   }`}
                 >
-                  <h2 className="text-lg font-bold">{day}</h2>
-                  <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => toggleDayCollapse(day)}
+                    className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                  >
+                    <h2 className="text-lg font-bold">{day}</h2>
                     <span className="text-sm opacity-80">
-                      {dayItems.length} {dayItems.length === 1 ? 'activity' : 'activities'}
+                      ({dayItems.length} {dayItems.length === 1 ? 'activity' : 'activities'})
                     </span>
                     {collapsedDays[day] ? (
                       <ChevronDown className="w-5 h-5" />
                     ) : (
                       <ChevronUp className="w-5 h-5" />
                     )}
-                  </div>
-                </button>
+                  </button>
+                  <button
+                    onClick={(e) => toggleArchiveDay(day, e)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      isArchived
+                        ? 'bg-white/20 hover:bg-white/30'
+                        : 'bg-white/20 hover:bg-white/30'
+                    }`}
+                  >
+                    <Archive className="w-4 h-4" />
+                    {isArchived ? 'Unarchive' : 'Mark Complete'}
+                  </button>
+                </div>
                 {/* Day Items - Collapsible */}
                 {!collapsedDays[day] && (
                   <div className="space-y-4">
