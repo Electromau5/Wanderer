@@ -9,7 +9,7 @@ const Wanderer = () => {
   const [items, setItems] = useState([]);
   const [tripInfo, setTripInfo] = useState({ title: '', dates: '' });
   const [showRawContent, setShowRawContent] = useState(false);
-  const [filter, setFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -296,15 +296,18 @@ const Wanderer = () => {
   };
 
   const filteredItems = items.filter(item => {
-    if (filter === 'all') return true;
-    return item.status === filter;
+    if (categoryFilter === 'all') return true;
+    return item.category === categoryFilter;
   });
 
-  const statusCounts = {
-    all: items.length,
-    pending: items.filter(i => i.status === 'pending').length,
-    approved: items.filter(i => i.status === 'approved').length
-  };
+  // Get categories that are actually used in items
+  const usedCategories = [...new Set(items.map(item => item.category))];
+
+  // Count items per category
+  const categoryCounts = usedCategories.reduce((acc, cat) => {
+    acc[cat] = items.filter(i => i.category === cat).length;
+    return acc;
+  }, {});
 
   // Item Card Component
   const ItemCard = ({ item }) => {
@@ -710,25 +713,36 @@ Title: Next Activity
             </div>
           </div>
 
-          {/* Filter tabs */}
-          <div className="flex gap-2">
-            {[
-              { key: 'all', label: 'All' },
-              { key: 'pending', label: 'Pending' },
-              { key: 'approved', label: 'Approved' }
-            ].map(({ key, label }) => (
-              <button
-                key={key}
-                onClick={() => setFilter(key)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  filter === key
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {label} ({statusCounts[key]})
-              </button>
-            ))}
+          {/* Tag filter tabs */}
+          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+            <button
+              onClick={() => setCategoryFilter('all')}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
+                categoryFilter === 'all'
+                  ? 'bg-gray-800 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              All ({items.length})
+            </button>
+            {usedCategories.map(catKey => {
+              const cat = categories[catKey] || categories.other;
+              const isActive = categoryFilter === catKey;
+              return (
+                <button
+                  key={catKey}
+                  onClick={() => setCategoryFilter(catKey)}
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+                    isActive
+                      ? 'ring-2 ring-offset-1 ring-gray-800 ' + cat.color
+                      : cat.color + ' hover:opacity-80'
+                  }`}
+                >
+                  <span>{cat.icon}</span>
+                  {cat.label} ({categoryCounts[catKey]})
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -737,7 +751,7 @@ Title: Next Activity
       <div className="max-w-4xl mx-auto px-4 py-6">
         {filteredItems.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
-            No {filter === 'all' ? '' : filter} items
+            No {categoryFilter === 'all' ? '' : (categories[categoryFilter]?.label || '')} items
           </div>
         ) : (
           // Group items by day
