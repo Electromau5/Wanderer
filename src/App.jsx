@@ -420,7 +420,8 @@ const Wanderer = () => {
       arrivalTime: item.arrivalTime || '',
       description: item.description || '',
       address: item.address || '',
-      notes: item.notes || ''
+      notes: item.notes || '',
+      day: item.day || ''
     });
 
     const category = categories[item.category] || categories.other;
@@ -444,7 +445,8 @@ const Wanderer = () => {
         arrivalTime: item.arrivalTime || '',
         description: item.description || '',
         address: item.address || '',
-        notes: item.notes || ''
+        notes: item.notes || '',
+        day: item.day || ''
       });
       setIsEditing(false);
       setShowCategoryDropdown(false);
@@ -496,6 +498,29 @@ const Wanderer = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
               placeholder="Activity title"
             />
+          </div>
+
+          {/* Day Dropdown */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-600 mb-1">Day</label>
+            <select
+              value={editForm.day}
+              onChange={(e) => setEditForm(prev => ({ ...prev, day: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+            >
+              {uniqueDays.map(day => (
+                <option key={day} value={day}>{day}</option>
+              ))}
+              <option value="__new__">+ Add new day</option>
+            </select>
+            {editForm.day === '__new__' && (
+              <input
+                type="text"
+                onChange={(e) => setEditForm(prev => ({ ...prev, day: e.target.value }))}
+                className="w-full mt-2 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                placeholder="e.g., Day 3 - Apr 24"
+              />
+            )}
           </div>
 
           {/* Category Dropdown */}
