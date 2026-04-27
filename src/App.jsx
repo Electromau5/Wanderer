@@ -28,6 +28,7 @@ const Wanderer = () => {
     arrivalTime: '',
     description: '',
     address: '',
+    notes: '',
     day: ''
   });
 
@@ -357,6 +358,7 @@ const Wanderer = () => {
       arrivalTime: newCardForm.arrivalTime.trim(),
       description: newCardForm.description.trim(),
       address: newCardForm.address.trim(),
+      notes: newCardForm.notes.trim(),
       day: newCardForm.day || uniqueDays[0] || 'Day 1',
       status: 'pending'
     };
@@ -368,6 +370,7 @@ const Wanderer = () => {
       arrivalTime: '',
       description: '',
       address: '',
+      notes: '',
       day: ''
     });
     setShowAddModal(false);
@@ -416,7 +419,8 @@ const Wanderer = () => {
       category: item.category,
       arrivalTime: item.arrivalTime || '',
       description: item.description || '',
-      address: item.address || ''
+      address: item.address || '',
+      notes: item.notes || ''
     });
 
     const category = categories[item.category] || categories.other;
@@ -439,7 +443,8 @@ const Wanderer = () => {
         category: item.category,
         arrivalTime: item.arrivalTime || '',
         description: item.description || '',
-        address: item.address || ''
+        address: item.address || '',
+        notes: item.notes || ''
       });
       setIsEditing(false);
       setShowCategoryDropdown(false);
@@ -578,7 +583,7 @@ const Wanderer = () => {
           </div>
 
           {/* Address Input */}
-          <div>
+          <div className="mb-4">
             <label className="block text-sm font-medium text-gray-600 mb-1">Address</label>
             <input
               type="text"
@@ -586,6 +591,18 @@ const Wanderer = () => {
               onChange={(e) => setEditForm(prev => ({ ...prev, address: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
               placeholder="e.g. 123 Main St, Tokyo, Japan"
+            />
+          </div>
+
+          {/* Notes Input */}
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Notes</label>
+            <textarea
+              value={editForm.notes}
+              onChange={(e) => setEditForm(prev => ({ ...prev, notes: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
+              rows={3}
+              placeholder="Additional notes..."
             />
           </div>
         </div>
@@ -718,11 +735,18 @@ const Wanderer = () => {
             href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.address)}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 text-blue-600 hover:text-blue-800 hover:underline transition-colors"
+            className="flex items-center gap-2 text-blue-600 hover:text-blue-800 hover:underline transition-colors mb-4"
           >
             <MapPin className="w-4 h-4 flex-shrink-0" />
             <span className="text-sm">{item.address}</span>
           </a>
+        )}
+
+        {/* Notes */}
+        {item.notes && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-3">
+            <p className="text-sm text-amber-800 whitespace-pre-wrap">{item.notes}</p>
+          </div>
         )}
       </div>
     );
@@ -1212,7 +1236,7 @@ Title: Next Activity
               </div>
 
               {/* Address */}
-              <div className="mb-6">
+              <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
                 <input
                   type="text"
@@ -1220,6 +1244,18 @@ Title: Next Activity
                   onChange={(e) => setNewCardForm(prev => ({ ...prev, address: e.target.value }))}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   placeholder="e.g., 123 Main St, Tokyo, Japan"
+                />
+              </div>
+
+              {/* Notes */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                <textarea
+                  value={newCardForm.notes}
+                  onChange={(e) => setNewCardForm(prev => ({ ...prev, notes: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
+                  rows={3}
+                  placeholder="Additional notes..."
                 />
               </div>
 
