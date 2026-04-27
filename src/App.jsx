@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Upload, Calendar, Clock, Check, X, ChevronDown, ChevronUp, FileText, RefreshCw, Loader, ArrowRightLeft, Pencil, Save, Plus, Trash2, Archive, MapPin } from 'lucide-react';
+import { Upload, Calendar, Clock, Check, X, ChevronDown, ChevronUp, FileText, RefreshCw, Loader, ArrowRightLeft, Pencil, Save, Plus, Trash2, Archive, MapPin, GripVertical } from 'lucide-react';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 const API_URL = '/api/itinerary';
 
@@ -314,6 +317,35 @@ const Wanderer = () => {
     setItems(prev => prev.filter(item => item.id !== itemId));
   };
 
+  // Reorder items within a day
+  const reorderItems = (activeId, overId, day) => {
+    setItems(prev => {
+      const dayItems = prev.filter(item => item.day === day);
+      const otherItems = prev.filter(item => item.day !== day);
+
+      const oldIndex = dayItems.findIndex(item => item.id === activeId);
+      const newIndex = dayItems.findIndex(item => item.id === overId);
+
+      const reorderedDayItems = arrayMove(dayItems, oldIndex, newIndex);
+
+      // Rebuild items array maintaining order
+      const result = [];
+      const dayItemsMap = new Map(reorderedDayItems.map((item, index) => [item.id, { ...item, order: index }]));
+
+      // Add items back in their day groups
+      const allDays = [...new Set(prev.map(item => item.day))];
+      allDays.forEach(d => {
+        if (d === day) {
+          result.push(...reorderedDayItems);
+        } else {
+          result.push(...prev.filter(item => item.day === d));
+        }
+      });
+
+      return result;
+    });
+  };
+
   // Add a new item
   const addNewItem = () => {
     if (!newCardForm.title.trim()) return;
@@ -374,7 +406,7 @@ const Wanderer = () => {
   }, {});
 
   // Item Card Component
-  const ItemCard = ({ item }) => {
+  const ItemCard = ({ item, dragHandleProps }) => {
     const [showMoveMenu, setShowMoveMenu] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
@@ -565,7 +597,17 @@ const Wanderer = () => {
       <div className={`rounded-xl border-2 p-5 transition-all ${statusStyles[item.status] || statusStyles.pending}`}>
         {/* Header: Title + Buttons */}
         <div className="flex items-start justify-between gap-4 mb-3">
-          <h3 className="text-xl font-bold text-gray-900 flex-1">{item.title}</h3>
+          <div className="flex items-center gap-3 flex-1">
+            {dragHandleProps && (
+              <div
+                {...dragHandleProps}
+                className="cursor-grab active:cursor-grabbing p-1 hover:bg-gray-200 rounded transition-colors touch-none"
+              >
+                <GripVertical className="w-5 h-5 text-gray-400" />
+              </div>
+            )}
+            <h3 className="text-xl font-bold text-gray-900">{item.title}</h3>
+          </div>
           {item.status === 'pending' && (
             <div className="flex gap-2 flex-shrink-0">
               <button
@@ -685,6 +727,43 @@ const Wanderer = () => {
       </div>
     );
   };
+
+  // Sortable Item Card Wrapper
+  const SortableItemCard = ({ item }) => {
+    const {
+      attributes,
+      listeners,
+      setNodeRef,
+      transform,
+      transition,
+      isDragging,
+    } = useSortable({ id: item.id });
+
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isDragging ? 0.5 : 1,
+      zIndex: isDragging ? 1000 : 1,
+    };
+
+    return (
+      <div ref={setNodeRef} style={style} {...attributes}>
+        <ItemCard item={item} dragHandleProps={listeners} />
+      </div>
+    );
+  };
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   // Loading screen
   if (isLoading) {
@@ -899,13 +978,29 @@ Title: Next Activity
                         </button>
                       </div>
                     </div>
-                    {/* Day Items - Collapsible */}
+                    {/* Day Items - Collapsible with Drag & Drop */}
                     {!collapsedDays[day] && (
-                      <div className="space-y-4">
-                        {dayItems.map(item => (
-                          <ItemCard key={item.id} item={item} />
-                        ))}
-                      </div>
+                      <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={(event) => {
+                          const { active, over } = event;
+                          if (over && active.id !== over.id) {
+                            reorderItems(active.id, over.id, day);
+                          }
+                        }}
+                      >
+                        <SortableContext
+                          items={dayItems.map(item => item.id)}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          <div className="space-y-4">
+                            {dayItems.map(item => (
+                              <SortableItemCard key={item.id} item={item} />
+                            ))}
+                          </div>
+                        </SortableContext>
+                      </DndContext>
                     )}
                   </div>
                 ))
